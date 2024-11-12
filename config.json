@@ -8,11 +8,11 @@
         }
     },
     "monitoring": {
-        "default_interval": 300,
-        "min_interval": 60,
+        "default_interval": 30,
+        "min_interval": 30,
         "max_interval": 3600,
         "retry_interval": 60,
-        "max_retries": 3
+        "max_retries": 5
     },
     "database": {
         "path": "monitor.db",
@@ -43,7 +43,7 @@
         "rate_limit": {
             "enabled": true,
             "max_requests": 5,
-            "time_window": 60
+            "time_window": 30
         }
     },
     "advanced": {
