@@ -15,24 +15,55 @@
         "max_retries": 3
     },
     "database": {
-        "path": "monitor.db"
+        "path": "monitor.db",
+        "backup": {
+            "enabled": true,
+            "interval": 86400,
+            "keep_days": 7
+        }
     },
     "notification": {
         "post_preview_length": 200,
-        "alert_on_error": true
+        "alert_on_error": true,
+        "formats": {
+            "new_post": "🔔 新帖子通知\n\n👤 用户: {username}\n📝 标题: {title}\n⏰ 时间: {date}\n🔗 链接: {link}\n\n内容预览:\n{preview}",
+            "error": "❌ 错误通知\n\n类型: {error_type}\n详情: {error_message}",
+            "status": "📊 状态报告\n\n监控状态: {status}\n在线时间: {uptime}\n当前监控用户数: {user_count}"
+        }
     },
     "login": {
         "max_attempts": 3,
+        "cookies_expire_days": 30,
         "auto_relogin": true
     },
     "security": {
         "encrypt_credentials": true,
-        "allowed_users": []
+        "encryption_key": "",
+        "allowed_users": [],
+        "rate_limit": {
+            "enabled": true,
+            "max_requests": 5,
+            "time_window": 60
+        }
     },
     "advanced": {
         "debug_mode": false,
         "log_level": "INFO",
         "log_file": "monitor.log",
-        "request_timeout": 30
+        "request_timeout": 30,
+        "session_timeout": 3600,
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    },
+    "maintenance": {
+        "auto_cleanup": {
+            "enabled": true,
+            "interval": 86400,
+            "keep_days": 30
+        },
+        "health_check": {
+            "enabled": true,
+            "interval": 300,
+            "timeout": 10
+        }
     }
 }
