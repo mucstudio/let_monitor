@@ -17,151 +17,165 @@ class SessionManager:
         self.last_check: Dict[int, datetime] = {}
 
     async def create_session(self, chat_id: int) -> Optional[aiohttp.ClientSession]:
-        """创建新的会话"""
-        try:
-            # 关闭已存在的会话
-            if chat_id in self.sessions:
-                await self.sessions[chat_id].close()
+    """创建新的会话"""
+    try:
+        # 关闭已存在的会话
+        if chat_id in self.sessions:
+            await self.sessions[chat_id].close()
 
-            # 创建 cookie jar
-            jar = aiohttp.CookieJar(unsafe=True)
+        # 创建 cookie jar
+        jar = aiohttp.CookieJar(unsafe=True)
 
-            # 创建新会话
-            connector = aiohttp.TCPConnector(verify_ssl=False)
-            timeout = aiohttp.ClientTimeout(total=30)
-            headers = {
-                'User-Agent': self.config.config['advanced']['user_agent'],
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1'
-            }
+        # 创建新会话
+        connector = aiohttp.TCPConnector(verify_ssl=False)
+        timeout = aiohttp.ClientTimeout(total=30)
+        
+        # 更新请求头，移除 br 编码
+        headers = {
+            'User-Agent': self.config.config['advanced']['user_agent'],
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate',  # 移除 br 编码
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Cache-Control': 'max-age=0',
+            'Host': 'www.lowendtalk.com',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1'
+        }
 
-            session = aiohttp.ClientSession(
-                headers=headers,
-                cookie_jar=jar,
-                connector=connector,
-                timeout=timeout
-            )
+        session = aiohttp.ClientSession(
+            headers=headers,
+            cookie_jar=jar,
+            connector=connector,
+            timeout=timeout
+        )
 
-            # 配置代理
-            proxy = self.config.get_proxy_url()
-            if proxy:
-                session._connector._ssl = False
-                session.proxy = proxy
+        # 配置代理
+        proxy = self.config.get_proxy_url()
+        if proxy:
+            session._connector._ssl = False
+            session.proxy = proxy
 
-            self.sessions[chat_id] = session
-            return session
+        self.sessions[chat_id] = session
+        return session
 
-        except Exception as e:
-            logging.error(f"创建会话失败: {str(e)}")
-            return None
+    except Exception as e:
+        logging.error(f"创建会话失败: {str(e)}")
+        return None
 
-    async def login(self, chat_id: int, force: bool = False) -> Tuple[bool, str]:
-        """执行登录"""
-        try:
-            # 检查登录尝试次数
-            if not force and self.login_attempts.get(chat_id, 0) >= self.config.config['login']['max_attempts']:
-                return False, "登录尝试次数过多，请稍后重试"
+async def login(self, chat_id: int, force: bool = False) -> Tuple[bool, str]:
+    """执行登录"""
+    try:
+        # 检查登录尝试次数
+        if not force and self.login_attempts.get(chat_id, 0) >= self.config.config['login']['max_attempts']:
+            return False, "登录尝试次数过多，请稍后重试"
 
-            # 获取用户配置
-            config = self.db.get_user_config(chat_id)
-            if not config:
-                return False, "未找到用户配置"
+        # 获取用户配置
+        config = self.db.get_user_config(chat_id)
+        if not config:
+            return False, "未找到用户配置"
 
-            # 创建新会话
-            session = await self.create_session(chat_id)
-            if not session:
-                return False, "创建会话失败"
+        # 创建新会话
+        session = await self.create_session(chat_id)
+        if not session:
+            return False, "创建会话失败"
 
-            # 首先获取登录页面
-            async with session.get('https://www.lowendtalk.com/entry/signin', ssl=False) as response:
-                if response.status != 200:
-                    return False, f"获取登录页面失败: HTTP {response.status}"
-                
-                html = await response.text()
-                soup = BeautifulSoup(html, 'html.parser')
-                
-                # 获取 TransientKey
-                transient_key = soup.find('input', {'name': 'TransientKey'})
-                if not transient_key:
-                    return False, "无法获取 TransientKey"
-                transient_key = transient_key.get('value', '')
+        # 设置统一的请求头
+        base_headers = session._default_headers.copy()
+        base_headers.update({
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Origin': 'https://www.lowendtalk.com',
+            'Referer': 'https://www.lowendtalk.com/entry/signin',
+        })
 
-            # 构造登录数据
-            login_data = {
-                'TransientKey': transient_key,
-                'ClientHour': datetime.now().strftime('%H'),
-                'ClientMinute': datetime.now().strftime('%M'),
-                'ClientTimestamp': str(int(time.time())),
-                'Email': config['forum_username'],
-                'Password': config['forum_password'],
-                'SignIn': 'Sign In'
-            }
+        # 首先获取登录页面
+        async with session.get(
+            'https://www.lowendtalk.com/entry/signin',
+            ssl=False,
+            headers=base_headers
+        ) as response:
+            if response.status != 200:
+                return False, f"获取登录页面失败: HTTP {response.status}"
+            
+            html = await response.text()
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            # 获取 TransientKey
+            transient_key = soup.find('input', {'name': 'TransientKey'})
+            if not transient_key:
+                return False, "无法获取 TransientKey"
+            transient_key = transient_key.get('value', '')
 
-            # 设置请求头
-            headers = {
-                'User-Agent': self.config.config['advanced']['user_agent'],
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Origin': 'https://www.lowendtalk.com',
-                'Referer': 'https://www.lowendtalk.com/entry/signin',
-                'Connection': 'keep-alive',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'same-origin',
-                'Sec-Fetch-User': '?1',
-                'Upgrade-Insecure-Requests': '1'
-            }
+        # 构造登录数据
+        login_data = {
+            'TransientKey': transient_key,
+            'ClientHour': datetime.now().strftime('%H'),
+            'ClientMinute': datetime.now().strftime('%M'),
+            'ClientTimestamp': str(int(time.time())),
+            'Email': config['forum_username'],
+            'Password': config['forum_password'],
+            'SignIn': 'Sign In'
+        }
 
-            # 执行登录
-            async with session.post(
-                'https://www.lowendtalk.com/entry/signin',
-                data=login_data,
-                headers=headers,
-                allow_redirects=True,
+        # 执行登录
+        async with session.post(
+            'https://www.lowendtalk.com/entry/signin',
+            data=login_data,
+            headers=base_headers,
+            allow_redirects=True,
+            ssl=False
+        ) as response:
+            if response.status not in [200, 302]:
+                self.login_attempts[chat_id] = self.login_attempts.get(chat_id, 0) + 1
+                return False, f"登录请求失败: HTTP {response.status}"
+            
+            # 检查重定向
+            if response.status == 302:
+                location = response.headers.get('Location', '')
+                if '/entry/authenticationfailed' in location.lower():
+                    return False, "账号或密码错误"
+
+            # 验证登录状态
+            async with session.get(
+                f"https://www.lowendtalk.com/profile/{config['forum_username']}",
+                headers=base_headers,
                 ssl=False
-            ) as response:
-                if response.status not in [200, 302]:
+            ) as verify_response:
+                if verify_response.status != 200:
                     self.login_attempts[chat_id] = self.login_attempts.get(chat_id, 0) + 1
-                    return False, f"登录请求失败: HTTP {response.status}"
-                
-                # 验证登录状态
-                verify_url = f"https://www.lowendtalk.com/profile/{config['forum_username']}"
-                async with session.get(verify_url, ssl=False) as verify_response:
-                    if verify_response.status != 200:
-                        self.login_attempts[chat_id] = self.login_attempts.get(chat_id, 0) + 1
-                        return False, "登录验证失败"
+                    return False, "登录验证失败"
 
-                    verify_html = await verify_response.text()
-                    if 'Sign In' in verify_html or 'sign in' in verify_html.lower():
-                        self.login_attempts[chat_id] = self.login_attempts.get(chat_id, 0) + 1
-                        return False, "登录验证失败，请检查账号密码"
+                verify_html = await verify_response.text()
+                if 'Sign In' in verify_html or 'sign in' in verify_html.lower():
+                    self.login_attempts[chat_id] = self.login_attempts.get(chat_id, 0) + 1
+                    return False, "登录验证失败，请检查账号密码"
 
-                    # 保存cookies
-                    cookies = {
-                        cookie.key: {
-                            'value': cookie.value,
-                            'domain': cookie.get('domain', ''),
-                            'path': cookie.get('path', '/'),
-                            'expires': cookie.get('expires', ''),
-                        }
-                        for cookie in session.cookie_jar
+                # 保存cookies
+                cookies = {
+                    cookie.key: {
+                        'value': cookie.value,
+                        'domain': cookie.get('domain', ''),
+                        'path': cookie.get('path', '/'),
+                        'expires': cookie.get('expires', ''),
                     }
-                    self.db.save_cookies(chat_id, cookies)
+                    for cookie in session.cookie_jar
+                }
+                self.db.save_cookies(chat_id, cookies)
 
-                    # 重置登录尝试计数
-                    self.login_attempts[chat_id] = 0
-                    self.last_check[chat_id] = datetime.now()
+                # 重置登录尝试计数
+                self.login_attempts[chat_id] = 0
+                self.last_check[chat_id] = datetime.now()
 
-                    return True, "登录成功"
+                return True, "登录成功"
 
-        except Exception as e:
-            logging.error(f"登录过程异常: {str(e)}")
-            return False, f"登录异常: {str(e)}"
+    except aiohttp.ClientError as e:
+        logging.error(f"网络请求异常: {str(e)}")
+        return False, f"网络请求异常: {str(e)}"
+    except Exception as e:
+        logging.error(f"登录过程异常: {str(e)}")
+        return False, f"登录异常: {str(e)}"
 
     async def check_session(self, chat_id: int) -> bool:
         """检查会话是否有效"""
