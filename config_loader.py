@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Any, Dict, Optional
+from typing import Dict, Any, Optional
 from pathlib import Path
 import logging
 from dataclasses import dataclass
@@ -143,16 +143,26 @@ class ConfigLoader:
         return proxy_config['url'] if proxy_config['enabled'] else None
 
 def setup_logging(config: Dict[str, Any]):
-    """设置日志"""
-    logging.basicConfig(
-        level=getattr(logging, config['level']),
-        filename=config['filename'],
-        format=config['format'],
-        handlers=[
-            logging.FileHandler(config['filename']),
-            logging.StreamHandler()  # 同时输出到控制台
-        ]
-    )
+    """设置日志系统"""
+    # 创建文件处理器
+    file_handler = logging.FileHandler(config['filename'])
+    file_handler.setFormatter(logging.Formatter(config['format']))
+    
+    # 创建控制台处理器
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter(config['format']))
+    
+    # 配置根日志记录器
+    root_logger = logging.getLogger()
+    root_logger.setLevel(getattr(logging, config['level']))
+    
+    # 清除现有的处理器
+    root_logger.handlers.clear()
+    
+    # 添加新的处理器
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+    
     # 设置第三方库的日志级别
     logging.getLogger('aiohttp').setLevel(logging.WARNING)
     logging.getLogger('telegram').setLevel(logging.WARNING)
