@@ -1,0 +1,38 @@
+{
+    "bot": {
+        "token": "YOUR_BOT_TOKEN",
+        "admin_chat_ids": [],
+        "proxy": {
+            "enabled": false,
+            "url": "socks5://127.0.0.1:1080"
+        }
+    },
+    "monitoring": {
+        "default_interval": 300,
+        "min_interval": 60,
+        "max_interval": 3600,
+        "retry_interval": 60,
+        "max_retries": 3
+    },
+    "database": {
+        "path": "monitor.db"
+    },
+    "notification": {
+        "post_preview_length": 200,
+        "alert_on_error": true
+    },
+    "login": {
+        "max_attempts": 3,
+        "auto_relogin": true
+    },
+    "security": {
+        "encrypt_credentials": true,
+        "allowed_users": []
+    },
+    "advanced": {
+        "debug_mode": false,
+        "log_level": "INFO",
+        "log_file": "monitor.log",
+        "request_timeout": 30
+    }
+}
