@@ -11,7 +11,7 @@
 2. 安装:
 ```bash
 # 克隆项目
-git clone https://github.com/yourusername/let_monitor.git
+git clone https://github.com/mucstudio/let_monitor.git
 cd let_monitor
 
 # 创建虚拟环境
