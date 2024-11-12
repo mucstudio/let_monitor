@@ -81,16 +81,16 @@ class LETMonitorBot:
             return WAITING_INTERVAL
             
         elif query.data == 'show_config':
-            await self.show_config(update.effective_chat.id)
+            await self.show_config(update.effective_chat.id, context)
             
         elif query.data == 'start_monitor':
-            await self.start_monitoring(update.effective_chat.id)
+            await self.start_monitoring(update.effective_chat.id, context)
             
         elif query.data == 'stop_monitor':
-            await self.stop_monitoring(update.effective_chat.id)
+            await self.stop_monitoring(update.effective_chat.id, context)
             
         elif query.data == 'remove_user':
-            return await self.show_users_for_removal(update.effective_chat.id)
+            return await self.show_users_for_removal(update.effective_chat.id, context)
             
         return ConversationHandler.END
 
@@ -228,11 +228,11 @@ class LETMonitorBot:
             
         return ConversationHandler.END
 
-  async def show_config(self, chat_id: int):
+    async def show_config(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         """显示当前配置"""
         config = self.db.get_user_config(chat_id)
         if not config:
-            await self.context.bot.send_message(
+            await context.bot.send_message(
                 chat_id=chat_id,
                 text="❌ 未设置论坛账号",
                 reply_markup=InlineKeyboardMarkup(self.main_keyboard)
@@ -249,17 +249,17 @@ class LETMonitorBot:
             f"\n监控用户列表：\n{users_str}"
         )
         
-        await self.context.bot.send_message(
+        await context.bot.send_message(
             chat_id=chat_id,
             text=message,
             reply_markup=InlineKeyboardMarkup(self.main_keyboard)
         )
 
-    async def show_users_for_removal(self, chat_id: int) -> int:
+    async def show_users_for_removal(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> int:
         """显示可删除的用户列表"""
         users = self.db.get_monitored_users(chat_id)
         if not users:
-            await self.context.bot.send_message(
+            await context.bot.send_message(
                 chat_id=chat_id,
                 text="当前没有监控任何用户",
                 reply_markup=InlineKeyboardMarkup(self.main_keyboard)
@@ -272,7 +272,7 @@ class LETMonitorBot:
         ]
         keyboard.append([InlineKeyboardButton("返回", callback_data='back')])
         
-        await self.context.bot.send_message(
+        await context.bot.send_message(
             chat_id=chat_id,
             text="选择要删除的用户：",
             reply_markup=InlineKeyboardMarkup(keyboard)
@@ -307,13 +307,13 @@ class LETMonitorBot:
         
         return ConversationHandler.END
 
-    async def monitor_task(self, chat_id: int):
+    async def monitor_task(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         """监控任务"""
         try:
             while True:
                 config = self.db.get_user_config(chat_id)
                 if not config:
-                    await self.context.bot.send_message(
+                    await context.bot.send_message(
                         chat_id=chat_id,
                         text="❌ 未找到配置信息，停止监控",
                         reply_markup=InlineKeyboardMarkup(self.main_keyboard)
@@ -340,16 +340,13 @@ class LETMonitorBot:
                                 post,
                                 self.config_loader.get_post_preview_length()
                             )
-                            await self.context.bot.send_message(
+                            await context.bot.send_message(
                                 chat_id=chat_id,
                                 text=message,
                                 disable_web_page_preview=True
                             )
-
-
-
-
-          # 更新最后检查时间
+                    
+                    # 更新最后检查时间
                     if posts:
                         latest_post = max(posts, key=lambda x: x['date'])
                         self.db.update_last_check(chat_id, username, latest_post['date'])
@@ -361,17 +358,17 @@ class LETMonitorBot:
             raise
         except Exception as e:
             logging.error(f"监控任务异常: {str(e)}")
-            await self.context.bot.send_message(
+            await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"❌ 监控发生错误: {str(e)}\n已停止监控",
                 reply_markup=InlineKeyboardMarkup(self.main_keyboard)
             )
             raise
 
-    async def start_monitoring(self, chat_id: int):
+    async def start_monitoring(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         """启动监控"""
         if chat_id in self.monitor_tasks:
-            await self.context.bot.send_message(
+            await context.bot.send_message(
                 chat_id=chat_id,
                 text="监控已在运行中",
                 reply_markup=InlineKeyboardMarkup(self.main_keyboard)
@@ -380,7 +377,7 @@ class LETMonitorBot:
             
         config = self.db.get_user_config(chat_id)
         if not config:
-            await self.context.bot.send_message(
+            await context.bot.send_message(
                 chat_id=chat_id,
                 text="❌ 请先设置论坛账号",
                 reply_markup=InlineKeyboardMarkup(self.main_keyboard)
@@ -389,7 +386,7 @@ class LETMonitorBot:
             
         users = self.db.get_monitored_users(chat_id)
         if not users:
-            await self.context.bot.send_message(
+            await context.bot.send_message(
                 chat_id=chat_id,
                 text="❌ 请先添加要监控的用户",
                 reply_markup=InlineKeyboardMarkup(self.main_keyboard)
@@ -398,7 +395,7 @@ class LETMonitorBot:
             
         # 测试登录
         if not await self.session_manager.ensure_login(chat_id):
-            await self.context.bot.send_message(
+            await context.bot.send_message(
                 chat_id=chat_id,
                 text="❌ 登录失败，请检查账号设置",
                 reply_markup=InlineKeyboardMarkup(self.main_keyboard)
@@ -407,7 +404,7 @@ class LETMonitorBot:
             
         try:
             # 启动监控任务
-            task = asyncio.create_task(self.monitor_task(chat_id))
+            task = asyncio.create_task(self.monitor_task(chat_id, context))
             self.monitor_tasks[chat_id] = task
             
             message = (
@@ -416,7 +413,7 @@ class LETMonitorBot:
                 f"检查间隔: {config['check_interval']} 秒"
             )
             
-            await self.context.bot.send_message(
+            await context.bot.send_message(
                 chat_id=chat_id,
                 text=message,
                 reply_markup=InlineKeyboardMarkup(self.main_keyboard)
@@ -424,16 +421,16 @@ class LETMonitorBot:
             
         except Exception as e:
             logging.error(f"启动监控失败: {str(e)}")
-            await self.context.bot.send_message(
+            await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"❌ 启动监控失败: {str(e)}",
                 reply_markup=InlineKeyboardMarkup(self.main_keyboard)
             )
 
-    async def stop_monitoring(self, chat_id: int):
+    async def stop_monitoring(self, chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         """停止监控"""
         if chat_id not in self.monitor_tasks:
-            await self.context.bot.send_message(
+            await context.bot.send_message(
                 chat_id=chat_id,
                 text="监控未运行",
                 reply_markup=InlineKeyboardMarkup(self.main_keyboard)
@@ -446,7 +443,7 @@ class LETMonitorBot:
             await self.session_manager.close_session(chat_id)
             del self.monitor_tasks[chat_id]
             
-            await self.context.bot.send_message(
+            await context.bot.send_message(
                 chat_id=chat_id,
                 text="✅ 监控已停止",
                 reply_markup=InlineKeyboardMarkup(self.main_keyboard)
@@ -454,7 +451,7 @@ class LETMonitorBot:
             
         except Exception as e:
             logging.error(f"停止监控失败: {str(e)}")
-            await self.context.bot.send_message(
+            await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"❌ 停止监控失败: {str(e)}",
                 reply_markup=InlineKeyboardMarkup(self.main_keyboard)
@@ -464,10 +461,14 @@ class LETMonitorBot:
         """清理资源"""
         # 停止所有监控任务
         for chat_id in list(self.monitor_tasks.keys()):
-            await self.stop_monitoring(chat_id)
+            try:
+                self.monitor_tasks[chat_id].cancel()
+                await self.session_manager.close_session(chat_id)
+            except Exception as e:
+                logging.error(f"清理资源失败: {str(e)}")
         
-        # 关闭所有会话
-        await self.session_manager.cleanup()
+        # 清空任务列表
+        self.monitor_tasks.clear()
 
 def main():
     """主函数"""
@@ -516,13 +517,21 @@ def main():
         await application.stop()
         await application.shutdown()
     
-    # 启动机器人
-    try:
-        application.run_polling()
-    except KeyboardInterrupt:
-        print("正在关闭机器人...")
+    # 设置关闭信号处理
+    import signal
+    def signal_handler(signum, frame):
+        print("接收到关闭信号，正在关闭机器人...")
         asyncio.run(shutdown(application))
-        print("机器人已关闭")
+        print("机器人已安全关闭")
+        import sys
+        sys.exit(0)
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    # 启动机器人
+    print("机器人已启动，按 Ctrl+C 关闭...")
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
     main()
